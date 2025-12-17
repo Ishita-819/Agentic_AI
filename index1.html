@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Agentic scRNA-seq Analysis</title>
+  <style>
+    /* Debugging: set explicit colors to avoid invisible text from user/browser styles */
+    body { font-family: Arial; margin: 40px; background: #ffffff; color: #000000; }
+    h1 { color: #111111; }
+    /* Add a subtle border so we can see the page area while debugging */
+    .page-debug-outline { border: 2px dashed rgba(0,0,0,0.06); padding: 12px; }
+    button { padding: 8px 14px; margin: 6px 0; cursor: pointer; }
+    .disabled { opacity: 0.6; pointer-events: none; }
+    pre { background: #f4f4f4; padding: 12px; white-space: pre-wrap; }
+    h2 { margin-top: 30px; }
+  </style>
+</head>
+<body>
+
+<h1>🧠 Agentic Single-Cell Analysis</h1>
+
+<button id="runBtn" onclick="runAnalysis()">Run Analysis</button>
+
+<div id="pipeline"></div>
+
+<div id="hypotheses"></div>
+
+<div id="nextSteps"></div>
+
+<div id="results"></div>
+
+<script>
+const API = "http://localhost:8000";
+
+async function runAnalysis() {
+  const btn = document.getElementById("runBtn");
+  btn.classList.add("disabled");
+  btn.innerText = "Running...";
+
+  // Start background job
+  const res = await fetch(`${API}/run-analysis`, { method: "POST" });
+  const job = await res.json();
+  if (!job || !job.job_id) {
+    document.getElementById('results').innerHTML = '<p style="color:red">Failed to start job</p>';
+    btn.classList.remove('disabled');
+    btn.innerText = 'Run Analysis';
+    return;
+  }
+
+  const jobId = job.job_id;
+  document.getElementById('results').innerHTML = `<p>Job started: ${jobId}</p>`;
+
+  // Poll for completion
+  const pollInterval = 1500; // ms
+  const poll = setInterval(async () => {
+    const s = await fetch(`${API}/status/${jobId}`);
+    const status = await s.json();
+    if (status && status.status === 'finished') {
+      clearInterval(poll);
+      const r = await fetch(`${API}/result/${jobId}`);
+      const resp = await r.json();
+      if (resp && resp.result && resp.result.result) {
+        const data = resp.result.result;
+
+        // ---- Pipeline status ----
+        document.getElementById("pipeline").innerHTML = `
+          <h2>Pipeline Progress</h2>
+          <ul>
+            <li>Clustering ✔</li>
+            <li>Differential Expression ✔</li>
+            <li>Trajectory ✔</li>
+          </ul>
+        `;
+
+        // ---- Hypotheses ----
+        document.getElementById("hypotheses").innerHTML = `
+          <h2>Generated Hypotheses</h2>
+          ${data.hypotheses ? data.hypotheses.map(h => `<p>${h}</p>`).join("") : '<p>No hypotheses returned</p>'}
+        `;
+
+        // ---- Next Steps Buttons ----
+        document.getElementById("nextSteps").innerHTML = `
+          <h2>Suggested Next Steps</h2>
+          ${data.next_steps ? data.next_steps.map(
+            s => `<button onclick="runNextStep('${s.replace(/'/g, "\\'")}')">${s}</button>`
+          ).join("<br>") : '<p>No next steps returned</p>'}
+        `;
+
+        btn.innerText = "Analysis Completed";
+        btn.classList.remove('disabled');
+      } else {
+        document.getElementById('results').innerHTML = '<p style="color:red">Job completed but no results</p>';
+        btn.classList.remove('disabled');
+        btn.innerText = 'Run Analysis';
+      }
+    } else if (status && status.status === 'failed') {
+      clearInterval(poll);
+      document.getElementById('results').innerHTML = `<p style="color:red">Job failed: ${status.error || 'unknown'}</p>`;
+      btn.classList.remove('disabled');
+      btn.innerText = 'Run Analysis';
+    } else {
+      // still running; optionally update a small status indicator
+      document.getElementById('results').innerHTML = `<p>Job ${jobId} status: ${status.status}</p>`;
+    }
+  }, pollInterval);
+}
+
+async function runNextStep(step) {
+  document.getElementById("results").innerHTML = "<p>Running selected analysis…</p>";
+
+  const res = await fetch(`${API}/run-next-step`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ suggestion: step })
+  });
+
+  const data = await res.json();
+
+  document.getElementById("results").innerHTML = `
+    <h2>Result: ${data.suggestion}</h2>
+    <h3>Quick Summary</h3>
+    <pre>${data.quick_summary}</pre>
+    <h3>Detailed Report</h3>
+    <pre>${data.detailed_report}</pre>
+  `;
+}
+</script>
+
+</body>
+</html>
