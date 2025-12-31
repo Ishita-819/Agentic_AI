@@ -105,12 +105,10 @@ def groq_chat(messages: List[Dict[str, str]], temperature: float = 0.25, max_tok
         logging.error(f"Groq call failed: {e}")
         return f"[Groq error: {e}]"
 
-
+"""
 def execute_mandatory_pipeline() -> Dict[str, Any]:
-    """
-    Execute the required sequential pipeline:
-    Clustering → Differential Expression → Trajectory Inference
-    """
+    
+    
     print("\n" + "="*60)
     print("PHASE 1: MANDATORY SEQUENTIAL PIPELINE")
     print("="*60)
@@ -141,6 +139,36 @@ def execute_mandatory_pipeline() -> Dict[str, Any]:
     
     # time.sleep(1)  # Final wait for all files
     
+    return results
+"""
+
+def execute_mandatory_pipeline() -> Dict[str, Any]:
+    """
+    Execute the required sequential pipeline:
+    Clustering → Differential Expression → Trajectory Inference
+    Returns a dict with per-step success + messages.
+    """
+    print("\n" + "=" * 60)
+    print("PHASE 1: MANDATORY SEQUENTIAL PIPELINE")
+    print("=" * 60)
+
+    results = {}
+
+    # Step 1: Clustering
+    print("\n📊 Step 1/3: Clustering Analysis")
+    ok, msg = run_script(STAGE_SCRIPTS["clustering"])
+    results["clustering"] = {"success": ok, "message": msg}
+
+    # Step 2: Differential Expression
+    print("\n📈 Step 2/3: Differential Expression Analysis")
+    ok, msg = run_script(STAGE_SCRIPTS["differential_expression"])
+    results["de"] = {"success": ok, "message": msg}
+
+    # Step 3: Trajectory Inference
+    print("\n🔄 Step 3/3: Trajectory Inference")
+    ok, msg = run_script(STAGE_SCRIPTS["trajectory"])
+    results["trajectory"] = {"success": ok, "message": msg}
+
     return results
 
 
@@ -759,7 +787,7 @@ def map_suggestion_to_action(
     }
 
 
-
+"""
 def run_analysis_for_web():
     pipeline_status = {
         "clustering": False,
@@ -789,6 +817,52 @@ def run_analysis_for_web():
         "pipeline": pipeline_status,
         "hypotheses": hypotheses,
         "next_steps": next_steps
+    }
+"""
+
+def run_analysis_for_web() -> Dict[str, Any]:
+    """
+    Orchestrate the full analysis for the web UI:
+    - Run mandatory pipeline
+    - Load results
+    - Generate hypotheses
+    - Suggest next steps
+    Returns a JSON‑serializable dict.
+    """
+    # 1) Run mandatory pipeline
+    pipeline_results = execute_mandatory_pipeline()
+
+    # Normalize to simple status strings for the UI
+    pipeline_status = {
+        "clustering": (
+            "done" if pipeline_results.get("clustering", {}).get("success") else "failed"
+        ),
+        "differential_expression": (
+            "done" if pipeline_results.get("de", {}).get("success") else "failed"
+        ),
+        "trajectory": (
+            "done" if pipeline_results.get("trajectory", {}).get("success") else "failed"
+        ),
+    }
+
+    # 2) Load all results
+    bio_text, deg_df, traj_df = load_complete_results()
+
+    # 3) Generate hypotheses
+    hypotheses = generate_comprehensive_hypotheses(
+        bio_text, deg_df, traj_df, n=5
+    )
+
+    # 4) Suggest next steps
+    next_steps = get_llm_suggested_next_steps(
+        hypotheses, bio_text, deg_df, traj_df, k=5
+    )
+
+    # 5) Return full payload for the UI
+    return {
+        "pipeline": pipeline_status,
+        "hypotheses": hypotheses,
+        "next_steps": next_steps,
     }
 
 
