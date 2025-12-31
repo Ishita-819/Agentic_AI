@@ -57,8 +57,8 @@ def _run_analysis_job(job_id: str):
 
         JOBS[job_id]["status"] = "finished"
         JOBS[job_id]["result"] = {
-            "result": result,
-            "bio_text_len": len(bio_text) if isinstance(bio_text, str) else None
+         "result":result,
+         "bio_text_len": len(bio_text) if isinstance(bio_text, str) else None
         }
     except Exception as e:
         logging.exception("Analysis job failed")
