@@ -59,40 +59,57 @@ async function runAnalysis() {
       clearInterval(poll);
       const r = await fetch(`${API}/result/${jobId}`);
       const resp = await r.json();
-      if (resp && resp.result && resp.result.result) {
-        const data = resp.result.result;
+      
+      if (resp && resp.result) {
+  // Support both wrapped and unwrapped shapes    
+        const data = resp.result.result || resp.result;
 
         // ---- Pipeline status ----
-        document.getElementById("pipeline").innerHTML = `
-          <h2>Pipeline Progress</h2>
-          <ul>
-            <li>Clustering ✔</li>
-            <li>Differential Expression ✔</li>
-            <li>Trajectory ✔</li>
-          </ul>
-        `;
+        if (data.pipeline) {
+          document.getElementById("pipeline").innerHTML = `
+            <h2>Pipeline Progress</h2>
+            <ul>
+              ${Object.entries(data.pipeline)
+                .map(([k, v]) => `<li>${k.replace(/_/g, " ")} ${v === "done" ? "✔" : v}</li>`)
+                .join("")}
+            </ul>
+          `;
+        }
 
-        // ---- Hypotheses ----
+  // ---- Hypotheses ----
         document.getElementById("hypotheses").innerHTML = `
           <h2>Generated Hypotheses</h2>
-          ${data.hypotheses ? data.hypotheses.map(h => `<p>${h}</p>`).join("") : '<p>No hypotheses returned</p>'}
+          ${
+            data.hypotheses && data.hypotheses.length
+              ? data.hypotheses.map((h) => `<p>${h}</p>`).join("")
+              : "<p>No hypotheses returned</p>"
+          }
         `;
 
-        // ---- Next Steps Buttons ----
-        document.getElementById("nextSteps").innerHTML = `
-          <h2>Suggested Next Steps</h2>
-          ${data.next_steps ? data.next_steps.map(
-            s => `<button onclick="runNextStep('${s.replace(/'/g, "\\'")}')">${s}</button>`
-          ).join("<br>") : '<p>No next steps returned</p>'}
-        `;
+  // ---- Next Steps Buttons ----
+          document.getElementById("nextSteps").innerHTML = `
+            <h2>Suggested Next Steps</h2>
+            ${
+              data.next_steps && data.next_steps.length
+                ? data.next_steps
+                    .map(
+                      (s) =>
+                        `<button onclick="runNextStep('${s.replace(/'/g, "\\'")}')">${s}</button>`
+                    )
+                    .join("<br>")
+                : "<p>No next steps returned</p>"
+            }
+          `;
 
-        btn.innerText = "Analysis Completed";
-        btn.classList.remove('disabled');
+          btn.innerText = "Analysis Completed";
+          btn.classList.remove("disabled");
       } else {
-        document.getElementById('results').innerHTML = '<p style="color:red">Job completed but no results</p>';
-        btn.classList.remove('disabled');
-        btn.innerText = 'Run Analysis';
+          document.getElementById("results").innerHTML =
+            '<p style="color:red">Job completed but no results</p>';
+          btn.classList.remove("disabled");
+          btn.innerText = "Run Analysis";
       }
+
     } else if (status && status.status === 'failed') {
       clearInterval(poll);
       document.getElementById('results').innerHTML = `<p style="color:red">Job failed: ${status.error || 'unknown'}</p>`;
@@ -123,6 +140,20 @@ async function runNextStep(step) {
     <h3>Detailed Report</h3>
     <pre>${data.detailed_report}</pre>
   `;
+
+  document.getElementById("nextSteps").innerHTML = `
+            <h2>Suggested Next Steps</h2>
+            ${
+              data.next_steps && data.next_steps.length
+                ? data.next_steps
+                    .map(
+                      (s) =>
+                        `<button onclick="runNextStep('${s.replace(/'/g, "\\'")}')">${s}</button>`
+                    )
+                    .join("<br>")
+                : "<p>No next steps returned</p>"
+            }
+          `;
 }
 </script>
 

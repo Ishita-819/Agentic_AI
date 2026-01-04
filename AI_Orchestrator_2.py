@@ -105,12 +105,10 @@ def groq_chat(messages: List[Dict[str, str]], temperature: float = 0.25, max_tok
         logging.error(f"Groq call failed: {e}")
         return f"[Groq error: {e}]"
 
-
+"""
 def execute_mandatory_pipeline() -> Dict[str, Any]:
-    """
-    Execute the required sequential pipeline:
-    Clustering → Differential Expression → Trajectory Inference
-    """
+    
+    
     print("\n" + "="*60)
     print("PHASE 1: MANDATORY SEQUENTIAL PIPELINE")
     print("="*60)
@@ -141,6 +139,36 @@ def execute_mandatory_pipeline() -> Dict[str, Any]:
     
     # time.sleep(1)  # Final wait for all files
     
+    return results
+"""
+
+def execute_mandatory_pipeline() -> Dict[str, Any]:
+    """
+    Execute the required sequential pipeline:
+    Clustering → Differential Expression → Trajectory Inference
+    Returns a dict with per-step success + messages.
+    """
+    print("\n" + "=" * 60)
+    print("PHASE 1: MANDATORY SEQUENTIAL PIPELINE")
+    print("=" * 60)
+
+    results = {}
+
+    # Step 1: Clustering
+    print("\n📊 Step 1/3: Clustering Analysis")
+    ok, msg = run_script(STAGE_SCRIPTS["clustering"])
+    results["clustering"] = {"success": ok, "message": msg}
+
+    # Step 2: Differential Expression
+    print("\n📈 Step 2/3: Differential Expression Analysis")
+    ok, msg = run_script(STAGE_SCRIPTS["differential_expression"])
+    results["de"] = {"success": ok, "message": msg}
+
+    # Step 3: Trajectory Inference
+    print("\n🔄 Step 3/3: Trajectory Inference")
+    ok, msg = run_script(STAGE_SCRIPTS["trajectory"])
+    results["trajectory"] = {"success": ok, "message": msg}
+
     return results
 
 
@@ -309,6 +337,30 @@ def extract_comprehensive_insights(bio_text: str, deg_df: pd.DataFrame,
     
     return insights
 
+# global_store.py
+hypotheses = []
+
+def set_value(x):
+    global hypotheses
+    hypotheses = x
+
+def get_value():
+    return hypotheses
+
+# reasoning_store.py
+reasoning_trace = []
+
+def add_reasoning(step, summary, result=None):
+    reasoning_trace.append({
+        "step": step,
+        "summary": summary,
+        "result": result
+    })
+
+def get_reasoning():
+    return reasoning_trace
+
+
 
 
 def generate_comprehensive_hypotheses(bio_text: str, deg_df: pd.DataFrame, 
@@ -447,6 +499,7 @@ DO NOT include any explanations, numbering, or additional text.
         if isinstance(parsed, list):
             hypotheses = [h.strip() for h in parsed[:n]]
             print(f"✅ Generated {len(hypotheses)} comprehensive hypotheses")
+            set_value(hypotheses)
             return hypotheses
     except (json.JSONDecodeError, AttributeError) as e:
         logging.warning(f"Failed to parse JSON from LLM: {e}")
@@ -492,7 +545,7 @@ DO NOT include any explanations, numbering, or additional text.
 
 
 # ---------------- Phase 2: Interactive Orchestrator with REAL Analysis ----------------
-def get_llm_suggested_next_steps(hypotheses: List[str], bio_text: str, 
+def get_llm_suggested_next_steps(hypotheses: List[str],reasoning_context: List[str], bio_text: str, 
                                 deg_df: pd.DataFrame, traj_df: pd.DataFrame, k: int = 5) -> List[str]:
     """
     LLM suggests simple, clear next steps (1 line each).
@@ -503,7 +556,7 @@ def get_llm_suggested_next_steps(hypotheses: List[str], bio_text: str,
     deg_preview = deg_df.head(10).to_string(index=False) if deg_df is not None else "[No DEG data]"
     traj_preview = traj_df.head(10).to_string(index=False) if traj_df is not None else "[No trajectory data]"
     
-    prompt = f"""
+    prompt = f"""  You are an expert computational biologist.
 Based on these analysis results, suggest {k} SIMPLE, CLEAR next steps for further investigation.
 Each suggestion should be ONE LINE ONLY, starting with a verb.
 
@@ -521,11 +574,13 @@ ANALYSIS RESULTS:
 KEY HYPOTHESES:
 {chr(10).join([f"{i+1}. {h}" for i, h in enumerate(hypotheses[:3])])}
 
-Suggest exactly {k} one-line next steps.
+Analyses already performed: {reasoning_context}
+
+Suggest exactly {k} one-line next steps.Propose the next most informative analyses.
 Return as a JSON array of strings.
 
 Example format:
-["Analyze inflammatory genes in trajectory", "Visualize cluster 3 markers", "Compare DEGs with known drug targets"]
+["Analyze inflammatory genes in trajectory", "Analyse clustering outputs", "Compare DEGs with known drug targets"]
 
 Return ONLY a JSON array.
 """
@@ -759,7 +814,7 @@ def map_suggestion_to_action(
     }
 
 
-
+"""
 def run_analysis_for_web():
     pipeline_status = {
         "clustering": False,
@@ -790,6 +845,65 @@ def run_analysis_for_web():
         "hypotheses": hypotheses,
         "next_steps": next_steps
     }
+"""
+
+MARKER_GENES = {
+    "Excitatory Neurons": ["SLC17A7", "CAMK2A", "SATB2", "VGLUT1"],
+    "Inhibitory Neurons": ["GAD1", "GAD2", "SST", "PVALB", "VIP"],
+    "Astrocytes": ["GFAP", "AQP4", "SLC1A3", "ALDH1L1"],
+    "Oligodendrocytes": ["MBP", "MOG", "PLP1", "MOBP"],
+
+    "OPCs": ["PDGFRA", "CSPG4"],
+    "Microglia": ["TREM2", "CX3CR1", "C1QA", "P2RY12"],
+    "Endothelial": ["CLDN5", "FLT1", "VWF", "PECAM1"],
+    "Pericytes": ["PDGFRB", "RGS5"]
+}
+
+def run_analysis_for_web() -> Dict[str, Any]:
+    """
+    Orchestrate the full analysis for the web UI:
+    - Run mandatory pipeline
+    - Load results
+    - Generate hypotheses
+    - Suggest next steps
+    Returns a JSON‑serializable dict.
+    """
+    # 1) Run mandatory pipeline
+    pipeline_results = execute_mandatory_pipeline()
+
+    # Normalize to simple status strings for the UI
+    pipeline_status = {
+        "clustering": (
+            "done" if pipeline_results.get("clustering", {}).get("success") else "failed"
+        ),
+        "differential_expression": (
+            "done" if pipeline_results.get("de", {}).get("success") else "failed"
+        ),
+        "trajectory": (
+            "done" if pipeline_results.get("trajectory", {}).get("success") else "failed"
+        ),
+    }
+
+    # 2) Load all results
+    bio_text, deg_df, traj_df = load_complete_results()
+
+    # 3) Generate hypotheses
+    hypotheses = generate_comprehensive_hypotheses(
+        bio_text, deg_df, traj_df, n=5
+    )
+    reasoning_context=[]
+
+    # 4) Suggest next steps
+    next_steps = get_llm_suggested_next_steps(
+        hypotheses, reasoning_context,bio_text, deg_df, traj_df, k=5
+    )
+
+    # 5) Return full payload for the UI
+    return {
+        "pipeline": pipeline_status,
+        "hypotheses": hypotheses,
+        "next_steps": next_steps,
+    }
 
 
 
@@ -808,9 +922,22 @@ def run_selected_next_step(
     detailed_report = execute_detailed_analysis(
         suggestion, deg_df, traj_df
     )
+    hypotheses = get_value()
+    add_reasoning(
+        step=suggestion,
+        summary=quick["summary"],
+        result=detailed_report
+    )
+    reasoning_context = get_reasoning()
+
+
+    next_steps = get_llm_suggested_next_steps(
+        hypotheses, reasoning_context,bio_text, deg_df, traj_df, k=5
+    )
 
     return {
         "suggestion": suggestion,
         "quick_summary": quick["summary"],
-        "detailed_report": detailed_report
+        "detailed_report": detailed_report,
+        "next_steps": next_steps
     }
