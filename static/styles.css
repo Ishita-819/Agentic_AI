@@ -1,0 +1,74 @@
+body {
+  font-family: "Inter", Arial, sans-serif;
+  background: #f7f9fc;
+  color: #1f2937;
+}
+
+.container {
+  max-width: 1100px;
+  margin: auto;
+}
+
+header {
+  margin-bottom: 24px;
+}
+
+.subtitle {
+  color: #6b7280;
+}
+
+.controls {
+  margin-bottom: 20px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.card {
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 16px 18px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+button {
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 16px;
+  font-weight: 500;
+}
+
+button:hover {
+  background: #1d4ed8;
+}
+
+button.secondary {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+button.secondary:hover {
+  background: #d1d5db;
+}
+
+#nextSteps {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.next-step-btn {
+  text-align: left;
+  line-height: 1.4;
+  padding: 12px 16px;
+}
+pre {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}

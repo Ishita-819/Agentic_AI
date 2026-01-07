@@ -3,31 +3,33 @@
 <head>
   <meta charset="UTF-8" />
   <title>Agentic scRNA-seq Analysis</title>
-  <style>
-    /* Debugging: set explicit colors to avoid invisible text from user/browser styles */
-    body { font-family: Arial; margin: 40px; background: #ffffff; color: #000000; }
-    h1 { color: #111111; }
-    /* Add a subtle border so we can see the page area while debugging */
-    .page-debug-outline { border: 2px dashed rgba(0,0,0,0.06); padding: 12px; }
-    button { padding: 8px 14px; margin: 6px 0; cursor: pointer; }
-    .disabled { opacity: 0.6; pointer-events: none; }
-    pre { background: #f4f4f4; padding: 12px; white-space: pre-wrap; }
-    h2 { margin-top: 30px; }
-  </style>
+ 
+
+    
+  
+  <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
+<div class="container">
+  <header>
+    <h1>🧠 Agentic AI for snRNA-seq Analysis</h1>
+    <p class="subtitle">Automated clustering, DEG, trajectory inference & hypothesis generation</p>
+  </header>
 
-<h1>🧠 Agentic Single-Cell Analysis</h1>
+  <section class="controls">
+    <button id="runBtn" onclick="runAnalysis()">Run Analysis</button>
+    <span id="status"></span>
+  </section>
 
-<button id="runBtn" onclick="runAnalysis()">Run Analysis</button>
+  <section class="grid">
+    <div class="card" id="pipeline"></div>
+    <div class="card" id="hypotheses"></div>
+  </section>
 
-<div id="pipeline"></div>
+  <section class="card" id="nextSteps"></section>
+  <section class="card" id="results"></section>
+</div>
 
-<div id="hypotheses"></div>
-
-<div id="nextSteps"></div>
-
-<div id="results"></div>
 
 <script>
 const API = "http://localhost:8000";
@@ -147,7 +149,7 @@ async function runNextStep(step) {
                 ? data.next_steps
                     .map(
                       (s) =>
-                        `<button onclick="runNextStep('${s.replace(/'/g, "\\'")}')">${s}</button>`
+                        `<button class="next-step-btn" onclick="runNextStep('${s.replace(/'/g, "\\'")}')">${s}</button>`
                     )
                     .join("<br>")
                 : "<p>No next steps returned</p>"

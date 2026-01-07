@@ -14,6 +14,8 @@ from AI_Orchestrator_2 import (
 )
 
 app = FastAPI(title="Agentic scRNA-seq UI")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 
 # Allow frontend JS to call backend
 app.add_middleware(
