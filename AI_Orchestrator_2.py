@@ -558,7 +558,7 @@ def get_llm_suggested_next_steps(hypotheses: List[str],reasoning_context: List[s
     
     prompt = f"""  You are an expert computational biologist.
 Based on these analysis results, suggest {k} SIMPLE, CLEAR next steps for further investigation.
-Each suggestion should be ONE LINE ONLY, starting with a verb.
+Return as a JSON array of strings.
 
 RULES:
 - Each suggestion must be exactly ONE LINE
@@ -575,14 +575,6 @@ KEY HYPOTHESES:
 {chr(10).join([f"{i+1}. {h}" for i, h in enumerate(hypotheses[:3])])}
 
 Analyses already performed: {reasoning_context}
-
-Suggest exactly {k} one-line next steps.Propose the next most informative analyses.
-Return as a JSON array of strings.
-
-Example format:
-["Analyze inflammatory genes in trajectory", "Analyse clustering outputs", "Compare DEGs with known drug targets"]
-
-Return ONLY a JSON array.
 """
     
     messages = [
@@ -630,22 +622,84 @@ def get_default_next_steps() -> List[str]:
     ]
 
 
+MARKER_GENES = {
+    "Excitatory Neurons": ["SLC17A7", "CAMK2A", "SATB2", "VGLUT1"],
+    "Inhibitory Neurons": ["GAD1", "GAD2", "SST", "PVALB", "VIP"],
+    "Astrocytes": ["GFAP", "AQP4", "SLC1A3", "ALDH1L1"],
+    "Oligodendrocytes": ["MBP", "MOG", "PLP1", "MOBP"],
+
+    "OPCs": ["PDGFRA", "CSPG4"],
+    "Microglia": ["TREM2", "CX3CR1", "C1QA", "P2RY12"],
+    "Endothelial": ["CLDN5", "FLT1", "VWF", "PECAM1"],
+    "Pericytes": ["PDGFRB", "RGS5"]
+}
+ALL_KNOWN_GENES = {
+    g for genes in MARKER_GENES.values() for g in genes
+}
+
+
+def execute_detailed_analysis(
+    suggestion: str,
+    execution_result: dict
+
+) -> str:
+    """
+    Interpret ONLY what was actually executed.
+    """
+
+    report = [
+        f"📊 DETAILED ANALYSIS REPORT: {suggestion}",
+        "=" * 60
+    ]
+
+    if not execution_result.get("success"):
+        report.append("❌ Analysis could not be executed.")
+        return "\n".join(report)
+
+    action = execution_result["action_type"]
+    result = execution_result["result"]
+
+    if action == "deg_analysis":
+        report.append("🔬 DIFFERENTIAL EXPRESSION RESULTS:")
+        report.append(f"• Total genes analyzed: {result['total_genes']}")
+        report.append(f"• Significant genes (p<0.05): {result['significant_genes']}")
+
+    elif action == "trajectory_analysis":
+        report.append("📈 TRAJECTORY ANALYSIS RESULTS:")
+        report.append(f"• Total genes analyzed: {result['total_genes']}")
+        report.append(f"• Strong correlations (>0.5): {result['strongly_correlated']}")
+
+    elif action == "marker_validation":
+        report.append("🧬 MARKER VALIDATION:")
+        report.append(f"• Known markers checked: {len(result['identified_markers'])}")
+
+    report.append("=" * 60)
+    report.append(f"📅 Completed: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    return "\n".join(report)
+
+
+
+"""
 def execute_detailed_analysis(
     suggestion: str,
     deg_df: pd.DataFrame,
     traj_df: pd.DataFrame
 ) -> str:
-    """
-    Perform detailed analysis based on suggestion.
-    Returns a comprehensive, UI-displayable analysis report.
-    """
+   
 
     suggestion_lower = suggestion.lower()
     report_lines = [f"📊 DETAILED ANALYSIS REPORT: {suggestion}", "=" * 60]
 
     # ---------------- 1. Gene extraction ----------------
-    gene_pattern = r'\b([A-Z][A-Z0-9]{1,5})\b'
-    genes = re.findall(gene_pattern, suggestion.upper())
+    #def extract_valid_genes(text: str, gene_universe: set) -> List[str]:
+    candidates = re.findall(r'\b[A-Z][A-Z0-9]{1,6}\b', suggestion.upper())
+    genes = sorted(set(g for g in candidates if g in ALL_KNOWN_GENES))
+    
+    # genes = extract_valid_genes(suggestion, ALL_KNOWN_GENES)
+
+    # gene_pattern = r'\b([A-Z][A-Z0-9]{1,5})\b'
+    # genes = re.findall(gene_pattern, suggestion.upper())
 
     if genes:
         report_lines.append(f"\n🎯 TARGET GENES IDENTIFIED: {', '.join(genes)}")
@@ -694,7 +748,8 @@ def execute_detailed_analysis(
                             report_lines.append(f"  • {gene}: Found in DEG data")
                         found = True
                 if not found:
-                    report_lines.append("  • No specified genes found in DEG data")
+                    report_lines.append("  • Selected genes are not among top pseudotime-correlated genes, "
+        "though global trajectory trends exist")
 
     # ---------------- 2. Pathway inference ----------------
     report_lines.append("\n🧬 PATHWAY ANALYSIS:")
@@ -735,19 +790,37 @@ def execute_detailed_analysis(
         report_lines.append("  • Findings relate to Alzheimer's astrocyte dysfunction")
 
     # ---------------- 5. Recommendations ----------------
-    report_lines.append("\n🎯 RECOMMENDED NEXT STEPS:")
-    report_lines.extend([
-        "  1. Experimentally validate key genes",
-        "  2. Perform pathway enrichment analysis",
-        "  3. Compare with external AD datasets",
-        "  4. Assess druggability of targets"
-    ])
+    # report_lines.append("\n🎯 RECOMMENDED NEXT STEPS:")
+    # report_lines.extend([
+    #     "  1. Experimentally validate key genes",
+    #     "  2. Perform pathway enrichment analysis",
+    #     "  3. Compare with external AD datasets",
+    #     "  4. Assess druggability of targets"
+    # ])
 
     report_lines.append("\n" + "=" * 60)
     report_lines.append(f"📅 Analysis completed: {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     return "\n".join(report_lines)
+"""
 
+
+def parse_suggestion_action(suggestion: str) -> dict:
+    s = suggestion.lower()
+
+    if "trajectory" in s or "pseudotime" in s:
+        return {"type": "trajectory_analysis"}
+
+    if "deg" in s or "expression" in s:
+        return {"type": "deg_analysis"}
+
+    if "marker" in s or "cell type" in s:
+        return {"type": "marker_validation"}
+
+    if "pathway" in s:
+        return {"type": "pathway_stub"}
+
+    return {"type": "unsupported"}
 
 def map_suggestion_to_action(
     suggestion: str,
@@ -756,15 +829,70 @@ def map_suggestion_to_action(
     traj_df: pd.DataFrame
 ) -> dict:
     """
-    Execute a suggested next step and return a concise summary.
-    Web-safe, no prints, no side effects.
+    Execute the selected next step deterministically.
+    NO interpretation, NO hallucination.
     """
+
+    action = parse_suggestion_action(suggestion)
+    result = {}
+
+    if action["type"] == "deg_analysis" and deg_df is not None:
+        pval_col = next((c for c in deg_df.columns if 'pval' in c.lower() or 'adj' in c.lower()), None)
+        sig = deg_df[deg_df[pval_col] < 0.05] if pval_col else pd.DataFrame()
+
+        result = {
+            "total_genes": len(deg_df),
+            "significant_genes": len(sig),
+            "top_genes": sig.head(10).to_dict("records")
+        }
+
+    elif action["type"] == "trajectory_analysis" and traj_df is not None:
+        corr_col = next((c for c in traj_df.columns if 'cor' in c.lower() or 'rho' in c.lower()), None)
+        strong = traj_df[traj_df[corr_col].abs() > 0.5] if corr_col else pd.DataFrame()
+
+        result = {
+            "total_genes": len(traj_df),
+            "strongly_correlated": len(strong),
+            "top_genes": strong.head(10).to_dict("records")
+        }
+
+    elif action["type"] == "marker_validation":
+        result = {
+            "identified_markers": list(ALL_KNOWN_GENES)
+        }
+
+    else:
+        return {
+            "success": False,
+            "summary": "Unsupported or unexecutable analysis step"
+        }
+
+    return {
+        "success": True,
+        "action_type": action["type"],
+        "result": result
+    }
+
+
+
+"""
+def map_suggestion_to_action(
+    suggestion: str,
+    bio_text: str,
+    deg_df: pd.DataFrame,
+    traj_df: pd.DataFrame
+) -> dict:
+    
 
     suggestion_lower = suggestion.lower()
     analysis = []
 
-    gene_pattern = r'\b([A-Z][A-Z0-9]{1,5})\b'
-    genes = re.findall(gene_pattern, suggestion.upper())
+    candidates = re.findall(r'\b[A-Z][A-Z0-9]{1,6}\b', suggestion.upper())
+    genes = sorted(set(g for g in candidates if g in ALL_KNOWN_GENES))
+    
+
+    # gene_pattern = r'\b([A-Z][A-Z0-9]{1,5})\b'
+    # genes = re.findall(gene_pattern, suggestion.upper())
 
     if genes:
         analysis.append(f"Identified target genes: {', '.join(genes)}")
@@ -814,7 +942,7 @@ def map_suggestion_to_action(
     }
 
 
-"""
+
 def run_analysis_for_web():
     pipeline_status = {
         "clustering": False,
@@ -847,17 +975,52 @@ def run_analysis_for_web():
     }
 """
 
-MARKER_GENES = {
-    "Excitatory Neurons": ["SLC17A7", "CAMK2A", "SATB2", "VGLUT1"],
-    "Inhibitory Neurons": ["GAD1", "GAD2", "SST", "PVALB", "VIP"],
-    "Astrocytes": ["GFAP", "AQP4", "SLC1A3", "ALDH1L1"],
-    "Oligodendrocytes": ["MBP", "MOG", "PLP1", "MOBP"],
 
-    "OPCs": ["PDGFRA", "CSPG4"],
-    "Microglia": ["TREM2", "CX3CR1", "C1QA", "P2RY12"],
-    "Endothelial": ["CLDN5", "FLT1", "VWF", "PECAM1"],
-    "Pericytes": ["PDGFRB", "RGS5"]
-}
+def llm_biological_interpretation(
+    suggestion: str,
+    execution_result: dict,
+    bio_text: str
+) -> str:
+    """
+    LLM-based biological interpretation.
+    STRICTLY grounded in execution_result.
+    """
+
+    system_prompt = """
+You are a biomedical domain expert.
+You MUST:
+- Interpret only the provided results in context to given action.
+- NOT invent new genes, pathways, or statistics
+- Clearly state uncertainty if data is insufficient
+"""
+
+    user_prompt = f"""
+USER REQUESTED ACTION:
+{suggestion}
+
+EXECUTED RESULTS (GROUND TRUTH):
+{json.dumps(execution_result, indent=2)}
+
+BIOLOGICAL CONTEXT:
+{bio_text}
+
+TASK:
+Provide biological interpretation:
+- What do these results suggest biologically?
+- Are these patterns expected?
+"""
+
+    messages = [
+        {"role": "system", "content":  system_prompt},
+        {"role": "user", "content": user_prompt}
+    ]
+    
+    response = groq_chat(messages, temperature=0.3)
+    print("✅ Generated biological interpretation", response)
+    return response
+
+
+
 
 def run_analysis_for_web() -> Dict[str, Any]:
     """
@@ -915,20 +1078,41 @@ def run_selected_next_step(
     deg_df = context["deg_df"]
     traj_df = context["traj_df"]
 
-    quick = map_suggestion_to_action(
+    execution  = map_suggestion_to_action(
         suggestion, bio_text, deg_df, traj_df
     )
 
     detailed_report = execute_detailed_analysis(
-        suggestion, deg_df, traj_df
+        suggestion, execution 
     )
+
+    biological_interpretation = None
+    if execution.get("success"):
+        biological_interpretation = llm_biological_interpretation(
+            suggestion=suggestion,
+            execution_result=execution,
+            bio_text=bio_text
+        )
+        
     hypotheses = get_value()
-    add_reasoning(
-        step=suggestion,
-        summary=quick["summary"],
-        result=detailed_report
-    )
-    reasoning_context = get_reasoning()
+    if execution.get("success"):
+        add_reasoning(
+            step=suggestion,
+            summary=biological_interpretation,
+            result=detailed_report
+        )
+
+    # add_reasoning(
+    #     step=suggestion,
+    #     summary=quick["summary"],
+    #     result=detailed_report
+    # )
+    # reasoning_context = get_reasoning()
+    reasoning_context = [
+    f"{r['step']}: {r['summary']}"
+    for r in get_reasoning()
+]
+
 
 
     next_steps = get_llm_suggested_next_steps(
@@ -937,7 +1121,9 @@ def run_selected_next_step(
 
     return {
         "suggestion": suggestion,
-        "quick_summary": quick["summary"],
+        "execution_result": execution,
+        "biological_interpretation": biological_interpretation,
         "detailed_report": detailed_report,
         "next_steps": next_steps
     }
+

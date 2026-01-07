@@ -135,10 +135,9 @@ async function runNextStep(step) {
 
   document.getElementById("results").innerHTML = `
     <h2>Result: ${data.suggestion}</h2>
-    <h3>Quick Summary</h3>
-    <pre>${data.quick_summary}</pre>
-    <h3>Detailed Report</h3>
-    <pre>${data.detailed_report}</pre>
+    <h3>Biological Interpretation</h3>
+    <pre>${ data.biological_interpretation}</pre>
+    
   `;
 
   document.getElementById("nextSteps").innerHTML = `
